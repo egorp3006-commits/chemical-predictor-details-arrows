@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Хімічні схеми та баланс</title>
+  <style>
+    :root{ --accent:#2a9df4; --pos:#1e6ed1; --neg:#d13b3b; --border:#9aa;}
+    body{background:#f6f9fc; margin:0; padding:0; font-family:Arial, sans-serif;}
+    .chem-wrap{max-width:1200px; margin:24px auto; background:#fff; padding:16px; border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,0.08);}
+    .title{text-align:center; font-weight:700; margin-bottom:6px; font-size:20px;}
+    .eq{ text-align:center; margin-bottom:12px; font-size:18px;}
+    .formula-box{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; align-items:center; margin-bottom:8px;}
+    .formula-part{display:inline-flex; align-items:center; gap:6px; font-weight:600;}
+    table.chem{border-collapse:collapse; width:100%;}
+    table.chem th, table.chem td{border:1px solid var(--border); padding:6px; text-align:center; min-width:46px; background:#fff; vertical-align:middle;}
+    table.chem th{background:#e6f0fb; font-weight:700;}
+    .elem-cell{background:#fafafa; font-weight:600;}
+    input.num{width:100%; box-sizing:border-box; border:0; text-align:center; font-size:14px; padding:4px; background:transparent;}
+    input.num:focus{outline:1px solid var(--accent); background:#eef7ff;}
+    .coef{width:48px; box-sizing:border-box; padding:4px; text-align:center; border-radius:6px; border:1px solid #d7eafb; background:#f8fbff;}
+    .mol-header{display:flex; flex-direction:column; gap:6px; align-items:center; justify-content:center;}
+    .mol-name{font-weight:700; font-size:14px;}
+    .mol-coef-label{font-size:11px; color:#555;}
+    .rp-cell{min-height:36px; min-width:64px; display:flex; align-items:center; justify-content:center; background:#fff; transition:color 0.15s, background 0.15s;}
+    .rp-zero{color:#333;}
+    .rp-pos{color:var(--pos); font-weight:700;}
+    .rp-neg{color:var(--neg); font-weight:700;}
+    .note{font-size:13px; color:#555; text-align:center; margin-top:8px;}
+    .mol-fallback{opacity:0.7; font-style:italic;}
+    .rp-header{ white-space:nowrap; vertical-align:middle; }
+
+    /* ===== КОНСТРУКТОР СХЕМ ===== */
+    .scheme-section{margin-top:32px; padding-top:24px; border-top:2px solid #e6f0fb;}
+    .scheme-title{font-weight:700; font-size:18px; margin-bottom:16px; color:#333;}
+    .scheme-controls{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
+    .btn{padding:8px 16px; border:none; border-radius:6px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; transition:background 0.2s;}
+    .btn:hover{background:var(--pos);}
+    .btn-secondary{background:#999;}
+    .btn-secondary:hover{background:#777;}
+    .btn-danger{background:var(--neg);}
+    .btn-danger:hover{background:#b02a2a;}
+    .input-group{display:flex; gap:8px; align-items:center;}
+    .input-group input, .input-group select{padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px;}
+    .input-group label{font-size:13px; color:#555; font-weight:600;}
+
+    .canvas-container{border:2px solid #e6f0fb; border-radius:8px; background:#fafafa; margin-bottom:16px; position:relative; overflow:hidden;}
+    #schemeCanvas{display:block; background:#fff; cursor:crosshair;}
+
+    .elements-list{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+    .element-badge{background:#e6f0fb; padding:6px 12px; border-radius:4px; font-size:12px; border:1px solid #d7eafb; cursor:pointer; transition:background 0.2s;}
+    .element-badge:hover{background:#d0e3f7;}
+    .element-badge.selected{background:var(--accent); color:#fff;}
+
+    @media (max-width:880px){
+      .coef{width:40px;}
+      table.chem th, table.chem td{font-size:13px; padding:6px;}
+      .formula-box{font-size:15px;}
+      .scheme-controls{flex-direction:column;}
+      .btn{width:100%;}
+    }
+  </style>
+</head>
+<body>
+
+<div class="chem-wrap">
+  <div class="title">Інтерактивна таблиця — баланс реакції</div>
+
+  <div class="eq" aria-live="polite">
+    <div class="formula-box" id="equation">
+    </div>
+    <div style="font-size:13px; color:#444;">(Реагенти зліва — Продукти справа)</div>
+  </div>
+
+  <table class="chem" id="mainTable" aria-label="Таблиця елементів і молекул">
+    <thead>
+      <tr>
+        <th rowspan="2">Елемент</th>
+        <th colspan="3">Реагенти</th>
+        <th class="rp-header" rowspan="2">R − P</th>
+        <th colspan="5">Продукти</th>
+      </tr>
+      <tr id="moleculeHeaders">
+      </tr>
+    </thead>
+    <tbody id="elementsBody">
+    </tbody>
+  </table>
+
+  <div class="note">Змінюй числа індексів або коефіцієнти — рівняння та різниця (R − P) оновлюються автоматично. Якщо коефіцієнт 0 — молекулу не показуємо; 1 — цифру 1 не показуємо.</div>
+
+  <!-- ===== КОНСТРУКТОР СХЕМ ===== -->
+  <div class="scheme-section">
+    <div class="scheme-title">Конструктор хімічних схем</div>
+
+    <div class="scheme-controls">
+      <div class="input-group">
+        <label>Режим:</label><select id="modeSelect">
+          <option value="draw">Малювання</option>
+          <option value="arrow">Стрілка</option>
+          <option value="text">Текст</option>
+          <option value="erase">Стирання</option>
+        </select>
+      </div>
+
+      <div class="input-group">
+        <label>Колір:</label>
+        <input type="color" id="colorPicker" value="#000000">
+      </div>
+
+      <div class="input-group">
+        <label>Розмір:</label>
+        <input type="range" id="brushSize" min="1" max="20" value="3">
+      </div>
+
+      <button class="btn" id="clearBtn">Очистити</button>
+      <button class="btn" id="downloadBtn">Завантажити</button>
+    </div>
+
+    <div class="canvas-container">
+      <canvas id="schemeCanvas"></canvas>
+    </div>
+
+    <div class="elements-list" id="elementsList"></div>
+  </div>
+</div>
+
+<script>
+  // ===== ТАБЛИЦЯ БАЛАНСУ =====
+  const elementsData = [
+    { name: 'Н', mass: 1 },
+    { name: 'С', mass: 12 },
+    { name: 'N', mass: 14 },
+    { name: 'O', mass: 16 },
+    { name: 'S', mass: 32 },
+    { name: 'P', mass: 31 },
+    { name: 'Cl', mass: 35.5 },
+    { name: 'Na', mass: 23 },
+    { name: 'Ca', mass: 40 },
+    { name: 'Fe', mass: 56 }
+  ];
+
+  let molecules = [
+    { formula: 'H₂O', coef: 1, side: 'reactants' },
+    { formula: 'CO₂', coef: 1, side: 'reactants' },
+    { formula: 'C₆H₁₂O₆', coef: 1, side: 'products' }
+  ];
+
+  function parseFormula(formula) {
+    const parsed = {};
+    let i = 0;
+    while (i < formula.length) {
+      let element = formula[i];
+      i++;
+      if (i < formula.length && formula[i] === formula[i].toLowerCase()) {
+        element += formula[i];
+        i++;
+      }
+      let count = '';
+      while (i < formula.length && /\d/.test(formula[i])) {
+        count += formula[i];
+        i++;
+      }
+      parsed[element] = (parsed[element] || 0) + (count ? parseInt(count) : 1);
+    }
+    return parsed;
+  }
+
+  function updateTable() {
+    const allElements = new Set();
+    molecules.forEach(m => {
+      Object.keys(parseFormula(m.formula)).forEach(el => allElements.add(el));
+    });
+
+    const sortedElements = Array.from(allElements).sort();
+
+    let headerHTML = '<th>Молекула</th><th>Коеф.</th>';
+    let bodyHTML = '';
+
+    sortedElements.forEach(el => {
+      bodyHTML += `<tr>
+        <td>${el}</td>`;
+
+      molecules.forEach((mol, idx) => {
+        const parsed = parseFormula(mol.formula);
+        const count = parsed[el] || 0;
+        const display = count > 0 ? count : '';
+        bodyHTML += `<td><input type="number" class="index-input" data-mol="${idx}" data-el="${el}" value="${display}" min="0"></td>`;
+      });
+
+      let reactantCount = 0, productCount = 0;
+      molecules.forEach((mol, idx) => {
+        const parsed = parseFormula(mol.formula);
+        const count = (parsed[el] || 0) * mol.coef;
+        if (mol.side === 'reactants') reactantCount += count;
+        else productCount += count;
+      });
+
+      const diff = reactantCount - productCount;
+      const diffClass = diff === 0 ? 'balanced' : 'unbalanced';
+      bodyHTML += `<td class="rp-cell ${diffClass}">${diff}</td>`;
+
+      molecules.forEach((mol, idx) => {
+        const parsed = parseFormula(mol.formula);
+        const count = (parsed[el] || 0) * mol.coef;
+        bodyHTML += `<td>${count}</td>`;
+      });
+
+      bodyHTML += '</tr>';
+    });
+
+    document.getElementById('moleculeHeaders').innerHTML = headerHTML;
+    document.getElementById('elementsBody').innerHTML = bodyHTML;
+    updateEquation();
+
+    document.querySelectorAll('.index-input').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const molIdx = parseInt(e.target.dataset.mol);
+        const element = e.target.dataset.el;
+        const newValue = parseInt(e.target.value) || 0;
+        const parsed = parseFormula(molecules[molIdx].formula);
+        parsed[element] = newValue;
+        molecules[molIdx].formula = Object.entries(parsed)
+          .map(([el, count]) => el + (count > 1 ? count : ''))
+          .join('');
+        updateTable();
+      });
+    });
+  }
+
+  function updateEquation() {
+    let eq = '';
+    molecules.filter(m => m.side === 'reactants').forEach((m, i) => {
+      if (i > 0) eq += ' + ';
+      eq += (m.coef > 1 ? m.coef : '') + m.formula;
+    });
+    eq += ' → ';
+    molecules.filter(m => m.side === 'products').forEach((m, i) => {
+      if (i > 0) eq += ' + ';
+      eq += (m.coef > 1 ? m.coef : '') + m.formula;
+    });
+    document.getElementById('equation').textContent = eq;
+  }
+
+  // ===== КОНСТРУКТОР СХЕМ =====
+  const canvas = document.getElementById('schemeCanvas');
+  const ctx = canvas.getContext('2d');
+  let isDrawing = false;
+  let lastX, lastY;
+
+  canvas.width = canvas.offsetWidth;
+  canvas.height = 400;
+
+  const tools = {
+    draw: () => drawLine(lastX, lastY, event.offsetX, event.offsetY),
+    arrow: () => drawArrow(event.offsetX, event.offsetY),
+    text: () => addText(),
+    erase: () => eraseLine(lastX, lastY, event.offsetX, event.offsetY)
+  };
+
+  canvas.addEventListener('mousedown', (e) => {
+    isDrawing = true;
+    lastX = e.offsetX;
+    lastY = e.offsetY;
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (isDrawing && document.getElementById('modeSelect').value === 'draw') {
+      tools.draw();
+      lastX = e.offsetX;
+      lastY = e.offsetY;
+    }
+  });
+
+  canvas.addEventListener('mouseup', () => {
+    isDrawing = false;
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  });
+
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = 'scheme.png';
+    link.click();
+  });
+
+  function drawLine(x1, y1, x2, y2) {
+    ctx.strokeStyle = document.getElementById('colorPicker').value;
+    ctx.lineWidth = document.getElementById('brushSize').value;
+    ctx.beginPath();
