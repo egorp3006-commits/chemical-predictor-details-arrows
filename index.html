@@ -1,0 +1,82 @@
+    <!DOCTYPE html>
+    <html lang="uk">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Баланс реакції + Конструктор схем</title>
+      <style>
+        :root { --accent: #2a9df4; --pos: #1e6ed1; --neg: #d13b3b; --border: #9aa; }
+        body { background: #f6f9fc; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        .chem-wrap { max-width: 1400px; margin: 24px auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .title { text-align: center; font-weight: 700; margin-bottom: 20px; font-size: 22px; color: #333; }
+        .eq { text-align: center; margin-bottom: 16px; font-size: 18px; font-weight: 600; color: #2a9df4; min-height: 28px; }
+        .formula-part { display: inline-flex; align-items: center; gap: 6px; }
+        .coef { font-weight: 700; }
+        .arrow { margin: 0 8px; }
+
+        /* Таблиця */
+        table.chem { border-collapse: collapse; width: 100%; margin-bottom: 24px; }
+        table.chem th, table.chem td { border: 1px solid var(--border); padding: 8px 6px; text-align: center; background: #fff; vertical-align: middle; }
+        table.chem th { background: #e6f0fb; font-weight: 700; font-size: 13px; }
+        .elem-cell { background: #fafafa; font-weight: 600; font-size: 13px; min-width: 50px; }
+        .mol-header { font-weight: 700; font-size: 12px; }
+        input.num { width: 100%; box-sizing: border-box; border: 0; text-align: center; font-size: 13px; padding: 4px 2px; background: transparent; }
+        input.num:focus { outline: 1px solid var(--accent); background: #eef7ff; }
+        .coef-input { width: 45px; box-sizing: border-box; padding: 4px; text-align: center; border-radius: 4px; border: 1px solid #d7eafb; background: #f8fbff; font-size: 12px; }
+        .coef-input:focus { outline: 1px solid var(--accent); background: #fff; }
+        .rp-cell { min-height: 32px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; }
+        .rp-zero { color: #333; }
+        .rp-pos { color: var(--pos); }
+        .rp-neg { color: var(--neg); }
+        .note { font-size: 12px; color: #666; text-align: center; margin-top: 12px; }
+
+        /* Конструктор схем */
+        .scheme-section { margin-top: 32px; padding-top: 24px; border-top: 2px solid #e6f0fb; }
+        .scheme-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: #333; }
+        .controls { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+        button { padding: 8px 16px; background: var(--accent); color: white; border: 0; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.2s; }
+        button:hover { background: var(--pos); }
+        button.secondary { background: #666; }
+        button.secondary:hover { background: #444; }
+        .mode-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+        .canvas-container { border: 2px solid #e6f0fb; border-radius: 8px; background: #fafbfc; padding: 16px; overflow: auto; min-height: 300px; position: relative; }
+        canvas { display: block; background: white; border-radius: 4px; cursor: crosshair; }
+        .element { position: absolute; background: white; border: 2px solid var(--accent); border-radius: 6px; padding: 8px 12px; font-weight: 600; cursor: move; user-select: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .element:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .element.selected { background: #eef7ff; border-color: var(--pos); }
+        .element input { width: 100%; box-sizing: border-box; border: 1px solid var(--border); padding: 4px; border-radius: 4px; font-size: 12px; }
+        .formula-input { width: 200px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+        .info-text { font-size: 12px; color: #666; margin-top: 12px; padding: 10px; background: #f0f6ff; border-radius: 6px; border-left: 3px solid var(--accent); }
+      </style>
+    </head>
+    <body>
+      <div class="chem-wrap">
+        <div class="title">⚗️ Баланс хімічної реакції + Конструктор схем</div>
+
+        <!-- Таблиця балансу -->
+        <div class="eq" id="equationDisplay">H₂O + CO₂ → H₂CO₃</div>
+
+        <table class="chem">
+          <thead>
+            <tr>
+              <th>Елемент</th>
+              <th colspan="3">Реагенти</th>
+              <th>Р−П</th>
+              <th colspan="5">Продукти</th>
+            </tr>
+            <tr>
+              <th></th>
+              <th class="mol-header">H₂O<br><input type="number" class="coef-input" id="coef0" value="1" min="0" max="20"></th>
+              <th class="mol-header">CO₂<br><input type="number" class="coef-input" id="coef1" value="1" min="0" max="20"></th>
+              <th class="mol-header">O₂<br><input type="number" class="coef-input" id="coef2" value="0" min="0" max="20"></th>
+              <th></th>
+              I appreciate you reaching out, but I don't have any prior response to continue from. This appears to be the start of our conversation.
+
+It looks like you may have been sharing HTML code for a chemistry equation balancer application, but the message got cut off mid-way through a table structure.
+
+If you'd like me to:
+- **Complete this chemistry balancer application** - Please let me know what features you'd like, and I'll create a full, working version
+- **Continue from a specific point** - Please paste the complete code you want me to build upon
+- **Fix or enhance existing code** - Share the full code and describe what needs to be done
+
+What would you like me to help you with?
