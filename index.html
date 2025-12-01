@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Інтерактивна таблиця — баланс реакції</title>
+
+<style>
+  :root{ --accent:#2a9df4; --pos:#1e6ed1; --neg:#d13b3b; --border:#9aa; --ui-bg:#fbfdff;}
+  body{background:#f6f9fc; margin:0; padding:0; font-family:Arial, sans-serif;}
+  .chem-wrap{max-width:1200px; margin:24px auto; background:#fff; padding:16px; border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,0.08);}
+  .title{text-align:center; font-weight:700; margin-bottom:6px; font-size:20px;}
+  .eq{ text-align:center; margin-bottom:12px; font-size:18px;}
+  .formula-box{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; align-items:center; margin-bottom:8px;}
+  .formula-part{display:inline-flex; align-items:center; gap:6px; font-weight:600;}
+
+  table.chem{border-collapse:collapse; width:100%;}
+  table.chem th, table.chem td{border:1px solid var(--border); padding:6px; text-align:center; min-width:46px; background:#fff; vertical-align:middle;}
+  table.chem th{background:#e6f0fb; font-weight:700;}
+  .elem-cell{background:#fafafa; font-weight:600;}
+  input.num{width:100%; box-sizing:border-box; border:0; text-align:center; font-size:14px; padding:4px; background:transparent;}
+  input.num:focus{outline:1px solid var(--accent); background:#eef7ff;}
+  .coef{width:48px; box-sizing:border-box; padding:4px; text-align:center; border-radius:6px; border:1px solid #d7eafb; background:#f8fbff;}
+  .mol-header{display:flex; flex-direction:column; gap:6px; align-items:center; justify-content:center;}
+  .mol-name{font-weight:700; font-size:14px;}
+  .mol-coef-label{font-size:11px; color:#555;}
+  .rp-cell{min-height:36px; min-width:64px; display:flex; align-items:center; justify-content:center; background:#fff; transition:color 0.15s, background 0.15s;}
+  .rp-zero{color:#333;}
+  .rp-pos{color:var(--pos); font-weight:700;}
+  .rp-neg{color:var(--neg); font-weight:700;}
+  .note{font-size:13px; color:#555; text-align:center; margin-top:8px;}
+  .mol-fallback{opacity:0.7; font-style:italic;}
+  /* Забороняємо перенесення для заголовка R-P, щоб бути в один рядок */
+  .rp-header{ white-space:nowrap; vertical-align:middle; }
+  /* small screens */
+  @media (max-width:880px){
+    .coef{width:40px;}
+    table.chem th, table.chem td{font-size:13px; padding:6px;}
+    .formula-box{font-size:15px;}
+  }
+
+  /* --- Нові стилі для редактора схем --- */
+  .scheme-wrap{margin-top:18px; padding:12px; border-radius:10px; background:var(--ui-bg); border:1px solid #e3eefc;}
+  .scheme-toolbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;}
+  .scheme-toolbar select, .scheme-toolbar button, .scheme-toolbar input[type="number"]{padding:6px 8px; border-radius:6px; border:1px solid #d7eafb; background:#fff;}
+  .scheme-area{position:relative; width:100%; height:420px; background:linear-gradient(180deg,#ffffff 0%, #f7fbff 100%); border:1px dashed #dbeaf8; border-radius:8px; overflow:hidden;}
+  .scheme-canvas{position:absolute; left:0; top:0; width:100%; height:100%;}
+  .scheme-elements{position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none;}
+  .formula-box-node{position:absolute; min-width:60px; padding:8px 10px; background:#fff; border:1px solid #cfe9ff; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.06); cursor:move; pointer-events:auto; user-select:none;}
+  .formula-box-node[contenteditable="true"]{outline:none;}
+  .formula-box-node .handle{position:absolute; right:6px; top:6px; width:10px; height:10px; background:#2a9df4; border-radius:50%; opacity:0.85; cursor:grab;}
+  .formula-selected{box-shadow:0 0 0 3px rgba(42,157,244,0.12); border-color:var(--accent);}
+  .scheme-footer{display:flex; justify-content:space-between; margin-top:8px; font-size:13px; color:#444;}
+  .small-muted{font-size:12px; color:#666;}
+  .control-group{display:flex; gap:6px; align-items:center;}
+  .bond-line{stroke:#111; stroke-width:2; fill:none;}
+  .bond-line.double{stroke-width:2;}
+  .bond-line.triple{stroke-width:2;}
+  .marker-arrow{fill:#111;}
+  .stage-box{position:absolute; border:1px dashed #bcdcff; background:linear-gradient(180deg, rgba(42,157,244,0.03), rgba(42,157,244,0.01)); border-radius:8px; padding:6px; pointer-events:auto; cursor:move;}
+  .btn{background:#fff; border:1px solid #d7eafb; padding:6px 10px; border-radius:6px; cursor:pointer;}
+  .btn.primary{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .help-instructions{font-size:13px; color:#333;}
+</style>
+</head>
+<body>
+
+<div class="chem-wrap">
+  <div class="title">Інтерактивна таблиця — баланс реакції</div>
+
+  <div class="eq" aria-live="polite">
+    <div class="formula-box" id="equation">
+      <!-- динамічне рівняння -->
+    </div>
+    <div style="font-size:13px; color:#444;">(Реагенти зліва — Продукти справа)</div>
+  </div>
+
+  <!-- Єдина таблиця, щоб вирівнювання рядків було точним -->
+  <table class="chem" id="mainTable" aria-label="Таблиця елементів і молекул">
+    <!-- Групова шапка -->
+    <thead>
+      <tr>
+        <th rowspan="2">Елемент</th>
+        <th colspan="3">Реагенти</th>
+        <th class="rp-header" rowspan="2">R − P</th>
+        <th colspan="5">Продукти</th>
+      </tr>
+      <tr id="moleculeHeaders">
+        <!-- тут будуть заголовки молекул (ім'я + input коефіцієнта) -->
+      </tr>
+    </thead>
+
+    <tbody id="elementsBody">
+      <!-- рядки елементів (заповнені скриптом) -->
+    </tbody>
+  </table>
+
+  <div class="note">Змінюй числа індексів або коефіцієнти — рівняння та різниця (R − P) оновлюються автоматично. Якщо коефіцієнт 0 — молекулу не показуємо; 1 — цифру 1 не показуємо.</div>
+
+  <!-- --- Новий блок редактора схем (розташований під таблицею, таблицю не міняєм) --- -->
+  <div class="scheme-wrap" aria-label="Редактор схем реакцій">
+    <div class="scheme-toolbar" role="toolbar" aria-label="Інструменти редактора">
+      <div class="control-group">
+        <label for="modeSelect">Режим:</label>
+        <select id="modeSelect" aria-label="Вибір режиму">
+          <option value="arrow">Стрілки</option>
+          <option value="struct">Структурні формули</option>
+          <option value="detailed">Детальні зв'язки</option>
+          <option value="multistage">Багатостадійні ланцюги</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <button id="addFormulaBtn" class="btn" aria-label="Додати формулу">Додати формулу</button>
+        <button id="addArrowBtn" class="btn" aria-label="Додати стрілку">Додати стрілку</button>
+        <button id="groupStageBtn" class="btn" aria-label="Групувати в етап">Створити етап</button>
+      </div>
+
+      <div class="control-group">
+        <label for="arrowType">Тип стрілки</label>
+        <select id="arrowType" aria-label="Тип стрілки">
+          <option value="single">→ (пряма)</option>
+          <option value="equil">⇌ (рівновага)</option>
+          <option value="rev">⇄ (обернена)</option>
+          <option value="fat">⇒ (потужна)</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="bondType">Тип зв'язку</label>
+        <select id="bondType" aria-label="Тип зв'язку">
+          <option value="single">Одинарний</option>
+          <option value="double">Подвійний</option>
+          <option value="triple">Потрійний</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="angleInput">Кут</label>
+        <input id="angleInput" type="number" min="-180" max="180" value="0" aria-label="Кут стрілки (градуси)">
+        <label><input id="snapToggle" type="checkbox" checked> Автопідгонка 15°</label>
+      </div>
+
+      <div class="control-group">
+        <button id="clearBtn" class="btn" aria-label="Очистити схему">Очистити</button>
+      </div>
+    </div>
+
+    <div class="scheme-area" id="schemeArea" role="application" aria-label="Поле побудови схеми">
+      <!-- SVG для ліній і стрілок -->
+      <svg id="schemeSvg" class="scheme-canvas" xmlns="http://www.w3.org/2000/svg" aria-hidden="false" focusable="false">
+        <defs>
+          <marker id="arrow-single" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="strokeWidth" markerWidth="8" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="marker-arrow"></path>
+          </marker>
+          <marker id="arrow-fat" viewBox="0 0 12 12" refX="12" refY="6" markerUnits="strokeWidth" markerWidth="10" markerHeight="8" orient="auto">
+            <path d="M 0 0 L 12 6 L 0 12 z" class="marker-arrow" fill="#2a9df4"></path>
+          </marker>
+          <marker id="arrow-double" viewBox="0 0 10 10" refX="10" refY="5" markerUnits="strokeWidth" markerWidth="8" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="marker-arrow"></path>
+          </marker>
+          <marker id="arrow-small" viewBox="0 0 6 6" refX="6" refY="3" markerUnits="strokeWidth" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 6 3 L 0 6 z" class="marker-arrow"></path>
+          </marker>
+        </defs>
+
+        <!-- group for bond/arrow lines -->
+        <g id="svgLines"></g>
+      </svg>
+
+      <!-- DOM layer for draggable formula boxes -->
+      <div class="scheme-elements" id="schemeElements" aria-live="polite"></div>
+    </div>
+
+    <div class="scheme-footer">
+      <div class="help-instructions" id="schemeHelp">Натисни "Додати формулу", потім переміщуй її. Щоб додати стрілку — вибери "Додати стрілку" і натисни на джерело, потім на ціль.</div>
+      <div class="small-muted">Перетягуй елементи, змінюй кут та тип стрілки; зв'язки оновлюються автоматично.</div>
+    </div>
+  </div>
+  <!-- --- Кінець блоку редактора схем --- -->
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // ---- існуючий код таблиці (не змінював логіку, тільки виправки в селекторах) ----
+  const elements = ["H","C","O","N","P","S","F","Na","Ca"];
+  const reactants = [
+    {id:"h2o", label:"H2O"},
+    {id:"co2", label:"CO2"},
+    {id:"o2",  label:"O2"}
+  ];
+  const products = [
+    {id:"h2",   label:"H2"},
+    {id:"o3",   label:"O3"},
+    {id:"h2co3",label:"H2CO3"},
+    {id:"n2",   label:"N2"},
+    {id:"nh3",  label:"NH3"}
+  ];
+
+  const headerRow = document.getElementById("moleculeHeaders");
+  function makeMolHeaderCell(mol){
+    const th = document.createElement("th");
+    th.innerHTML = `
+      <div class="mol-header">
+        <div class="mol-name" data-mol="${mol.id}" id="name_${mol.id}">${mol.label}</div>
+        <div class="mol-coef-label">
+          <input class="coef" aria-label="Коефіцієнт ${mol.id}" data-mol="${mol.id}" type="number" min="0" step="1" value="1">
+        </div>
+      </div>`;
+    return th;
+  }
+  reactants.forEach(m => headerRow.appendChild(makeMolHeaderCell(m)));
+  products.forEach(m => headerRow.appendChild(makeMolHeaderCell(m)));
+
+  const body = document.getElementById("elementsBody");
+  elements.forEach(elem => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="elem-cell">${elem}</td>`;
+
+    reactants.forEach(m => {
+      const td = document.createElement("td");
+      td.innerHTML = `<input class="num cell left" data-mol="${m.id}" data-elem="${elem}" type="number" value="${defaultIndex(m.id, elem)}" min="0" step="1" aria-label="${m.id} ${elem}">`;
+      tr.appendChild(td);
+    });
+
+    tr.innerHTML += `<td class="rp-cell" id="rp_${elem}">0</td>`;
+
+    products.forEach(m => {
+      const td = document.createElement("td");
+      td.innerHTML = `<input class="num cell right" data-mol="${m.id}" data-elem="${elem}" type="number" value="${defaultIndex(m.id, elem)}" min="0" step="1" aria-label="${m.id} ${elem}">`;
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  });
+
+  function defaultIndex(mol, elem){
+    const map = {
+      h2o: {H:2,O:1},
+      co2: {C:1,O:2},
+      o2:  {O:2},
+      h2:  {H:2},
+      o3:  {O:3},
+      h2co3:{H:2,C:1,O:3},
+      n2:  {N:2},
+      nh3: {N:1,H:3}
+    };
+    return (map[mol] && map[mol][elem]) ? map[mol][elem] : 0;
+  }
+
+  function qAll(selector){ return Array.from(document.querySelectorAll(selector)); }
+
+  function buildFormulaHTML(molId){
+    let parts = [];
+    elements.forEach(el => {
+      const input = document.querySelector(`.cell[data-mol="${molId}"][data-elem="${el}"]`);
+      const val = input ? Number(input.value) || 0 : 0;
+      if(val > 0){
+        parts.push(el + (val > 1 ? `${val}` : ""));
+      }
+    });
+    if(parts.length === 0) return `<span class="mol-fallback">${molId}</span>`;
+    return parts.join("");
+  }
+
+  function buildEquation(){
+    const leftParts = [];
+    reactants.forEach(m => {
+      const coefInput = document.querySelector(`.coef[data-mol="${m.id}"]`);
+      const coef = coefInput ? Number(coefInput.value) || 0 : 0;
+      if(coef === 0) return;
+      const formula = buildFormulaHTML(m.id);
+      const prefix = coef > 1 ? `${coef}` : "";
+      leftParts.push(prefix + formula);
+    });
+    const rightParts = [];
+    products.forEach(m => {
+      const coefInput = document.querySelector(`.coef[data-mol="${m.id}"]`);
+      const coef = coefInput ? Number(coefInput.value) || 0 : 0;
+      if(coef === 0) return;
+      const formula = buildFormulaHTML(m.id);
+      const prefix = coef > 1 ? `${coef}` : "";
+      rightParts.push(prefix + formula);
+    });
+
+    const joiner = ' <span style="color:#666; font-weight:600">+</span> ';
+    const leftHTML = leftParts.length ? leftParts.join(joiner) : '<span style="color:#999">—</span>';
+    const rightHTML = rightParts.length ? rightParts.join(joiner) : '<span style="color:#999">—</span>';
+
+    const eqBox = document.getElementById("equation");
+    eqBox.innerHTML = `<div class="formula-part">${leftHTML}</div><div style="font-weight:700; padding:0 8px"> = </div><div class="formula-part">${rightHTML}</div>`;
+  }
+
+  function updateDifference(){
+    elements.forEach(elem => {
+      let leftSum = 0;
+      qAll(`.left[data-elem="${elem}"]`).forEach(input => leftSum += Number(input.value) || 0);
+      let rightSum = 0;
+      qAll(`.right[data-elem="${elem}"]`).forEach(input => rightSum += Number(input.value) || 0);
+      const diff = leftSum - rightSum;
+      const cell = document.getElementById(`rp_${elem}`);
+      cell.textContent = diff;
+      cell.classList.remove("rp-pos","rp-neg","rp-zero");
+      if(diff > 0) cell.classList.add("rp-pos");
+      else if(diff < 0) cell.classList.add("rp-neg");
+      else cell.classList.add("rp-zero");
+    });
+  }
+
+  function onChangeHandler(){
+    [...reactants, ...products].forEach(m => {
+      const nameEl = document.getElementById(`name_${m.id}`);
+      if(nameEl) nameEl.innerHTML = buildFormulaHTML(m.id);
+    });
+    buildEquation();
+    updateDifference();
+  }
+
+  qAll("input.num").forEach(inp => inp.addEventListener("input", onChangeHandler));
+  qAll("input.coef").forEach(inp => inp.addEventListener("input", onChangeHandler));
+
+  setTimeout(() => {
+    qAll("input.num").forEach(inp => inp.addEventListener("input", onChangeHandler));
+    qAll("input.coef").forEach(inp => inp.addEventListener("input", onChangeHandler));
+    [...reactants, ...products].forEach(m => {
+      const coef = document.querySelector(`.coef[data-mol="${m.id}"]`);
+      const any = elements.some(el => {
+        const elInput = document.querySelector(`.cell[data-mol="${m.id}"][data-elem="${el}"]`);
+        return elInput && Number(elInput.value) > 0;
+      });
+      if(coef) coef.value = any ? coef.value || 1 : 0;
+    });
+    onChangeHandler();
+  }, 0);
+
+  // ---- Кінець таблиці ----
+
+
+  // ---- Новий код: редактор схем зі стрілками та блоками (ВЕРСІЯ З ВИПРАВЛЕННЯМИ) ----
+  const schemeArea = document.getElementById('schemeArea');
+  const schemeSvg = document.getElementById('schemeSvg');
+  const svgLines = document.getElementById('svgLines');
+  const schemeElements = document.getElementById('schemeElements');
+
+  const modeSelect = document.getElementById('modeSelect');
+  const addFormulaBtn = document.getElementById('addFormulaBtn');
+  const addArrowBtn = document.getElementById('addArrowBtn');
+  const arrowTypeSelect = document.getElementById('arrowType');
+  const bondTypeSelect = document.getElementById('bondType');
+  const angleInput = document.getElementById('angleInput');
+  const snapToggle = document.getElementById('snapToggle');
+  const clearBtn = document.getElementById('clearBtn');
+  const groupStageBtn = document.getElementById('groupStageBtn');
+  const schemeHelp = document.getElementById('schemeHelp');
+
+  let nodeIdCounter = 1;
+  let arrowIdCounter = 1;
+  let stageIdCounter = 1;
+
+  const nodes = {}; // id -> {el, x, y, w, h, selected}
+  const arrows = {}; // id -> {from, to, svgEl, type, angle, bondType, lines:[]}
+  const stages = {}; // id -> {el, children: [nodeIds]}
+
+  // Helper to compute center coordinates of a node relative to schemeArea
+  function getNodeCenter(nodeId){
+    const n = nodes[nodeId];
+    if(!n) return null;
+    const nodeRect = n.el.getBoundingClientRect();
+    const areaRect = schemeArea.getBoundingClientRect();
+    const cx = (nodeRect.left - areaRect.left) + nodeRect.width/2;
+    const cy = (nodeRect.top - areaRect.top) + nodeRect.height/2;
+    return {x: cx, y: cy, w: nodeRect.width, h: nodeRect.height};
+  }
+
+  // Create a draggable formula box
+  function createFormulaBox(text = "CH3–CH2–OH", x = 40, y = 40){
+    const id = 'node_' + (nodeIdCounter++);
+    const div = document.createElement('div');
+    div.className = 'formula-box-node';
+    div.setAttribute('data-id', id);
+    div.setAttribute('tabindex', 0);
+    div.style.left = x + 'px';
+    div.style.top = y + 'px';
+    div.innerHTML = `<div class="handle" title="Перетягнути" aria-hidden="true"></div>
+                     <div class="formula-content" contenteditable="true" aria-label="Редагування формули">${escapeHtml(text)}</div>`;
+    schemeElements.appendChild(div);
+    // temporarily set approximate size; will update after rendering
+    nodes[id] = {el: div, x, y, w: 140, h: 36, selected: false};
+
+    // After appended, measure accurate size
+    setTimeout(() => {
+      const r = div.getBoundingClientRect();
+      nodes[id].w = r.width || nodes[id].w;
+      nodes[id].h = r.height || nodes[id].h;
+      updateArrowsForNode(id);
+    }, 0);
+
+    makeDraggable(div, id);
+    // click handler for selection / arrow creation
+    div.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      handleNodeClick(id, ev);
+    });
+
+    const content = div.querySelector('.formula-content');
+    content.addEventListener('input', () => {
+      // resizing may change node dimensions
+      setTimeout(() => {
+        const r = div.getBoundingClientRect();
+        nodes[id].w = r.width;
+        nodes[id].h = r.height;
+        updateArrowsForNode(id);
+        updateStageBoundsForNode(id);
+      }, 0);
+    });
+
+    return id;
+  }
+
+  function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // DRAG: use single document-level handlers to avoid many listeners
+  let dragState = null; // {id, startX, startY, origX, origY, pointerId}
+  function makeDraggable(el, id){
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const areaRect = schemeArea.getBoundingClientRect();
+      dragState = {
+        id,
+        startX: e.clientX,
+        startY: e.clientY,
+        origX: rect.left - areaRect.left,
+        origY: rect.top - areaRect.top,
+        pointerId: e.pointerId
+      };
+      el.setPointerCapture(e.pointerId);
+    });
+  }
+
+  document.addEventListener('pointermove', (e) => {
+    if(!dragState) return;
+    const ds = dragState;
+    const dx = e.clientX - ds.startX;
+    const dy = e.clientY - ds.startY;
+    const nd = nodes[ds.id];
+    if(!nd) return;
+    const areaRect = schemeArea.getBoundingClientRect();
+    // get latest width/height
+    const r = nd.el.getBoundingClientRect();
+    nd.w = r.width; nd.h = r.height;
+    let newX = ds.origX + dx;
+    let newY = ds.origY + dy;
+    const pad = 8;
+    newX = Math.max(pad, Math.min(newX, areaRect.width - nd.w - pad));
+    newY = Math.max(pad, Math.min(newY, areaRect.height - nd.h - pad));
+    nd.x = newX; nd.y = newY;
+    nd.el.style.left = newX + 'px';
+    nd.el.style.top = newY + 'px';
+    updateArrowsForNode(ds.id);
+    updateStageBoundsForNode(ds.id);
+  });
+
+  document.addEventListener('pointerup', (e) => {
+    if(!dragState) return;
+    try{ nodes[dragState.id].el.releasePointerCapture(dragState.pointerId); } catch(ex){}
+    dragState = null;
+  });
+
+  // On scheme area click, clear selection
+  schemeArea.addEventListener('click', (e) => clearSelection());
+
+  // Node click and arrow creation
+  let arrowCreationState = {active:false, from:null};
+  function handleNodeClick(id, ev){
+    const mode = modeSelect.value;
+    if(mode === 'arrow' || ev.shiftKey){
+      if(!arrowCreationState.active){
+        arrowCreationState.active = true;
+        arrowCreationState.from = id;
+        schemeHelp.textContent = 'Оберіть ціль для стрілки (натисніть на іншу формулу), або клікніть ще раз на ту ж щоб скасувати.';
+        highlightNode(id, true);
+      } else {
+        const from = arrowCreationState.from;
+        const to = id;
+        if(from && to && from !== to){
+          createArrow(from, to, {type: arrowTypeSelect.value, bondType: bondTypeSelect.value, angle: Number(angleInput.value)});
+        }
+        highlightNode(arrowCreationState.from, false);
+        arrowCreationState.active = false;
+        arrowCreationState.from = null;
+        schemeHelp.textContent = 'Готово. Додай ще або перетягни елементи.';
+      }
+      return;
+    }
+
+    // selection toggle
+    toggleSelectNode(id);
+  }
+
+  function highlightNode(id, on){
+    const n = nodes[id];
+    if(!n) return;
+    if(on) n.el.classList.add('formula-selected');
+    else n.el.classList.remove('formula-selected');
+  }
+
+  function toggleSelectNode(id){
+    const n = nodes[id];
+    if(!n) return;
+    n.selected = !n.selected;
+    if(n.selected) n.el.classList.add('formula-selected');
+    else n.el.classList.remove('formula-selected');
+  }
+
+  function clearSelection(){
+    Object.keys(nodes).forEach(k => {
+      if(nodes[k].selected){
+        nodes[k].selected = false;
+        nodes[k].el.classList.remove('formula-selected');
+      }
+    });
+    if(arrowCreationState.active){
+      highlightNode(arrowCreationState.from, false);
+      arrowCreationState.active = false;
+      arrowCreationState.from = null;
+      schemeHelp.textContent = 'Скасовано вибір стрілки.';
+    } else {
+      schemeHelp.textContent = 'Натисни "Додати формулу" щоб створити нову, або "Додати стрілку" щоб малювати зв\'язки.';
+    }
+  }
+
+  // Create arrow (SVG lines). We maintain arrows[aid].lines array containing SVG <line> elements.
+  function createArrow(fromId, toId, opts = {}){
+    const id = 'arrow_' + (arrowIdCounter++);
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute('data-id', id);
+    svgLines.appendChild(g);
+    const type = opts.type || 'single';
+    const bondType = opts.bondType || 'single';
+    const angle = (typeof opts.angle === 'number') ? opts.angle : 0;
+    arrows[id] = {from: fromId, to: toId, svgEl: g, type, angle, bondType, lines: []};
+    updateArrowPosition(id);
+    return id;
+  }
+
+  // Update arrow coordinates and (re)build parallel lines according to bondType
+  function updateArrowPosition(arrowId){
+    const ar = arrows[arrowId];
+    if(!ar) return;
+    const fromCenter = getNodeCenter(ar.from);
+    const toCenter = getNodeCenter(ar.to);
+    if(!fromCenter || !toCenter) return;
+
+    let fx = fromCenter.x, fy = fromCenter.y;
+    let tx = toCenter.x, ty = toCenter.y;
+
+    const explicitAngle = Number(ar.angle) || 0;
+    if(explicitAngle !== 0){
+      let len = Math.hypot(tx - fx, ty - fy);
+      if(len < 32) len = 120;
+      let a = explicitAngle;
+      if(snapToggle.checked) a = Math.round(a / 15) * 15;
+      const rad = a * Math.PI / 180;
+      tx = fx + Math.cos(rad) * len;
+      ty = fy + Math.sin(rad) * len;
+    } else if(snapToggle.checked){
+      const dx = tx - fx, dy = ty - fy;
+      const ang = Math.atan2(dy, dx);
+      const snapped = Math.round((ang * 180/Math.PI) / 15) * 15 * Math.PI/180;
+      const r = Math.hypot(dx, dy);
+      tx = fx + Math.cos(snapped)*r;
+      ty = fy + Math.sin(snapped)*r;
+    }
+
+    // clear previous lines
+    ar.lines.forEach(l => l.remove());
+    ar.lines = [];
+
+    // For bonds: single -> 1 line; double -> 2 lines; triple -> 3 lines
+    const count = (ar.bondType === 'single') ? 1 : (ar.bondType === 'double') ? 2 : 3;
+    // compute perpendicular unit vector for offsets
+    const dx = tx - fx, dy = ty - fy;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = -dy / len, uy = dx / len;
+    const spacing = 6;
+
+    // compute offsets array (centered)
+    let offsets = [];
+    if(count === 1) offsets = [0];
+    else if(count === 2) offsets = [spacing/2, -spacing/2];
+    else if(count === 3) offsets = [0, spacing, -spacing];
+
+    // create lines
+    offsets.forEach((off, idx) => {
+      const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      l.setAttribute('stroke-linecap', 'round');
+      l.setAttribute('class', 'bond-line');
+      // choose marker based on arrow type (only end marker for direction; for ⇌ we add small start marker)
+      let markerEnd = 'url(#arrow-single)';
+      if(ar.type === 'fat') markerEnd = 'url(#arrow-fat)';
+      else if(ar.type === 'equil' || ar.type === 'rev') markerEnd = 'url(#arrow-double)';
+      l.setAttribute('marker-end', markerEnd);
+      if(ar.type === 'equil' || ar.type === 'rev') l.setAttribute('marker-start', 'url(#arrow-small)');
+      const sx1 = fx + ux*off;
+      const sy1 = fy + uy*off;
+      const sx2 = tx + ux*off;
+      const sy2 = ty + uy*off;
+      l.setAttribute('x1', sx1);
+      l.setAttribute('y1', sy1);
+      l.setAttribute('x2', sx2);
+      l.setAttribute('y2', sy2);
+      ar.svgEl.appendChild(l);
+      ar.lines.push(l);
+    });
+  }
+
+  function updateArrowsForNode(nodeId){
+    Object.keys(arrows).forEach(aid => {
+      const a = arrows[aid];
+      if(a.from === nodeId || a.to === nodeId){
+        updateArrowPosition(aid);
+      }
+    });
+  }
+
+  function updateStageBoundsForNode(nodeId){
+    Object.keys(stages).forEach(sid => {
+      const stage = stages[sid];
+      if(!stage) return;
+      if(stage.children.includes(nodeId)){
+        let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+        stage.children.forEach(nid => {
+          const n = nodes[nid];
+          if(!n) return;
+          const r = n.el.getBoundingClientRect();
+          const areaRect = schemeArea.getBoundingClientRect();
+          const nx = r.left - areaRect.left;
+          const ny = r.top - areaRect.top;
+          minX = Math.min(minX, nx);
+          minY = Math.min(minY, ny);
+          maxX = Math.max(maxX, nx + r.width);
+          maxY = Math.max(maxY, ny + r.height);
+        });
+        if(!isFinite(minX)) return;
+        const pad = 12;
+        stage.el.style.left = (minX - pad) + 'px';
+        stage.el.style.top = (minY - pad) + 'px';
+        stage.el.style.width = (maxX - minX + pad*2) + 'px';
+        stage.el.style.height = (maxY - minY + pad*2) + 'px';
+      }
+    });
+  }
+
+  // UI bindings
+  addFormulaBtn.addEventListener('click', () => {
+    const mode = modeSelect.value;
+    const defaultText = (mode === 'struct') ? 'H–O–H' : 'R';
+    const id = createFormulaBox(defaultText, 40 + Math.random()*80, 40 + Math.random()*120);
+    const content = nodes[id].el.querySelector('.formula-content');
+    setTimeout(()=> content.focus(), 50);
+  });
+
+  addArrowBtn.addEventListener('click', () => {
+    modeSelect.value = 'arrow';
+    schemeHelp.textContent = 'Клікни на джерело, потім на ціль щоб створити стрілку.';
+    // prepare arrow creation state (user will click source then target)
+    arrowCreationState.active = false;
+    arrowCreationState.from = null;
+  });
+
+  clearBtn.addEventListener('click', () => {
+    Object.keys(nodes).forEach(k => nodes[k].el.remove());
+    Object.keys(arrows).forEach(k => {
+      const g = arrows[k].svgEl;
+      if(g) g.remove();
+    });
+    Object.keys(stages).forEach(k => stages[k].el.remove());
+    for(const k in nodes) delete nodes[k];
+    for(const k in arrows) delete arrows[k];
+    for(const k in stages) delete stages[k];
+    nodeIdCounter = arrowIdCounter = stageIdCounter = 1;
+    schemeHelp.textContent = 'Схема очищена.';
+  });
+
+  angleInput.addEventListener('input', () => {
+    const a = Number(angleInput.value) || 0;
+    // update currently selected arrows (if any) or arrows connected to selected nodes
+    Object.keys(arrows).forEach(aid => {
+      const ar = arrows[aid];
+      if(nodes[ar.from].selected || nodes[ar.to].selected){
+        ar.angle = a;
+        updateArrowPosition(aid);
+      }
+    });
+  });
+
+  bondTypeSelect.addEventListener('change', () => {
+    Object.keys(arrows).forEach(aid => {
+      const ar = arrows[aid];
+      if(nodes[ar.from].selected || nodes[ar.to].selected){
+        ar.bondType = bondTypeSelect.value;
+        updateArrowPosition(aid);
+      }
+    });
+  });
+
+  arrowTypeSelect.addEventListener('change', () => {
+    Object.keys(arrows).forEach(aid => {
+      const ar = arrows[aid];
+      if(nodes[ar.from].selected || nodes[ar.to].selected){
+        ar.type = arrowTypeSelect.value;
+        updateArrowPosition(aid);
+      }
+    });
+  });
+
+  // Group selected nodes into a stage (draggable box)
+  groupStageBtn.addEventListener('click', () => {
+    const selected = Object.keys(nodes).filter(k => nodes[k].selected);
+    if(selected.length === 0){
+      schemeHelp.textContent = 'Оберіть елементи (клік по елементу) щоб згрупувати у етап.';
+      return;
+    }
+    const sid = 'stage_' + (stageIdCounter++);
+    const div = document.createElement('div');
+    div.className = 'stage-box';
+    div.setAttribute('data-id', sid);
+    div.innerHTML = `<strong>Етап</strong>`;
+    schemeElements.appendChild(div);
+    stages[sid] = {el: div, children: selected.slice()};
+    // position and size
+    updateStageBoundsForNode(selected[0]);
+    makeStageDraggable(div, sid);
+    selected.forEach(k => { nodes[k].selected = false; nodes[k].el.classList.remove('formula-selected'); });
+    schemeHelp.textContent = 'Етап створено. Перетягни його разом з дітьми.';
+  });
+
+  function makeStageDraggable(el, sid){
+    let isDown=false, startX=0, startY=0, origX=0, origY=0;
+    el.addEventListener('pointerdown', (e) => {
+      if(e.button !== 0) return;
+      isDown = true;
+      el.setPointerCapture(e.pointerId);
+      const rect = el.getBoundingClientRect();
+      const areaRect = schemeArea.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      origX = rect.left - areaRect.left;
+      origY = rect.top - areaRect.top;
+    });
+    function moveHandler(e){
+      if(!isDown) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const newX = origX + dx;
+      const newY = origY + dy;
+      el.style.left = newX + 'px';
+      el.style.top = newY + 'px';
+      const st = stages[sid];
+      if(st){
+        st.children.forEach(nid => {
+          const nd = nodes[nid];
+          if(!nd) return;
+          nd.x += dx;
+          nd.y += dy;
+          nd.el.style.left = nd.x + 'px';
+          nd.el.style.top = nd.y + 'px';
+          updateArrowsForNode(nid);
+        });
+      }
+      startX = e.clientX;
+      startY = e.clientY;
+      origX = newX;
+      origY = newY;
+    }
+    function upHandler(e){
+      if(!isDown) return;
+      isDown = false;
+      try{ el.releasePointerCapture(e.pointerId);}catch(e){}
+    }
+    document.addEventListener('pointermove', moveHandler);
+    document.addEventListener('pointerup', upHandler);
+  }
+
+  // keep arrows aligned on resize
+  window.addEventListener('resize', () => {
+    Object.keys(arrows).forEach(aid => updateArrowPosition(aid));
+  });
+
+  // clicking on svg should not clear selection entirely
+  schemeSvg.addEventListener('click', (e) => e.stopPropagation());
+
+  // periodic refresh to catch any layout changes (cheap but robust)
+  setInterval(() => {
+    Object.keys(arrows).forEach(aid => updateArrowPosition(aid));
+  }, 500);
+
+  // ---- кінець нового коду редактора схем ----
+
+});
+</script>
+
+</body>
+</html>
