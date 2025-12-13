@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Таблиця — баланс реакції з векторами</title>
+  <style>
+    :root { --accent: #2a9df4; --pos: #1e6ed1; --neg: #d13b3b; --border: #9aa; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #f6f9fc; font-family: Arial, sans-serif; padding: 20px; }
+
+    .container { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+    .section { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    .title { font-weight: 700; font-size: 18px; margin-bottom: 15px; color: #333; }
+
+    table.chem { border-collapse: collapse; width: 100%; }
+    table.chem th, table.chem td { border: 1px solid var(--border); padding: 8px; text-align: center; background: #fff; }
+    table.chem th { background: #e6f0fb; font-weight: 700; }
+    .elem-cell { background: #fafafa; font-weight: 600; }
+    
+    input.num { width: 50px; border: 0; text-align: center; font-size: 14px; padding: 4px; background: transparent; }
+    input.num:focus { outline: 1px solid var(--accent); background: #eef7ff; }
+    
+    .axis-checkbox { width: 20px; height: 20px; cursor: pointer; }
+    .axis-col { width: 60px; }
+    
+    #canvas { border: 1px solid #ddd; background: #fafafa; display: block; margin-top: 10px; }
+
+    .grid-line { stroke: #e0e0e0; stroke-width: 1; }
+    .grid-point { fill: #ccc; }
+    .axis-line { stroke: #333; stroke-width: 2; }
+    .axis-label { font-size: 12px; fill: #333; }
+    .vector-line { stroke-width: 2; }
+    .vector-point { r: 4; }
+
+    @media (max-width: 1024px) { .container { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- ТАБЛИЦЯ -->
+  <div class="section">
+    <div class="title">Хімічна таблиця — вибір осей</div>
+
+    <table class="chem" id="mainTable">
+      <thead>
+        <tr>
+          <th>Елемент</th>
+          <th class="axis-col">X</th>
+          <th class="axis-col">Y</th>
+          <th colspan="3">Реагенти</th>
+          <th colspan="5">Продукти</th>
+        </tr>
+        <tr id="moleculeHeaders"></tr>
+      </thead>
+      <tbody id="elementsBody"></tbody>
+    </table>
+  </div>
+
+  <!-- ГРАФІК -->
+  <div class="section">
+    <div class="title">Координатна сітка (вектори)</div>
+    <canvas id="canvas" width="500" height="500"></canvas>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const elements = ["H", "C", "O", "N"];
+  const reactants = [
+    {id: "h2o", label: "H2O"},
+    {id: "co2", label: "CO2"},
+    {id: "o2", label: "O2"}
+  ];
+  const products = [
+    {id: "h2", label: "H2"},
+    {id: "o3", label: "O3"},
+    {id: "h2co3", label: "H2CO3"},
+    {id: "n2", label: "N2"},
+    {id: "nh3", label: "NH3"}
+  ];
+
+  function defaultIndex(mol, elem) {
+    const map = {
+      h2o: {H: 2, O: 1},
+      co2: {C: 1, O: 2},
+      o2: {O: 2},
+      h2: {H: 2},
+      o3: {O: 3},
+      h2co3: {H: 2, C: 1, O: 3},
+      n2: {N: 2},
+      nh3: {N: 1, H: 3}
+    };
+    return (map[mol] && map[mol][elem]) ? map[mol][elem] : 0;
+  }
+
+  // Заголовки молекул
+  const headerRow = document.getElementById("moleculeHeaders");
+  function makeMolHeaderCell(mol) {
+    const th = document.createElement("th");
+    th.innerHTML = `
+      <div style="font-weight:700; font-size:14px;">${mol.label}</div>
+      <input class="coef" data-mol="${mol.id}" type="number" min="0" step="1" value="1" style="width:50px; padding:4px;">
+    `;
+    return th;
+  }
+
+  reactants.forEach(m => headerRow.appendChild(makeMolHeaderCell(m)));
+  products.forEach(m => headerRow.appendChild(makeMolHeaderCell(m)));
+
+  // Рядки елементів
+  const body = document.getElementById("elementsBody");
+  elements.forEach(elem => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="elem-cell">${elem}</td>`;
+
+    // X та Y чекбокси
+    tr.innerHTML += `
+      <td class="axis-col">
+        <input type="radio" class="axis-checkbox axis-x" name="axis-x" value="${elem}" aria-label="X вісь ${elem}">
+      </td>
+      <td class="axis-col">
+        <input type="radio" class="axis-checkbox axis-y" name="axis-y" value="${elem}" aria-label="Y вісь ${elem}">
+      </td>
+    `;
+
+    // Реагенти
+    reactants.forEach(m => {
+      const td =I appreciate you reaching out, but I don't have a prior response to continue from. This appears to be the start of our conversation.
+
+If you have an incomplete code snippet or project that you'd like me to help you continue, please paste the complete content you'd like me to build upon, and I'll be happy to continue from where it left off.
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
