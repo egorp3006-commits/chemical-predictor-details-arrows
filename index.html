@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Інтерактивна таблиця — баланс реакції + вектори (fixed layout)</title>
+
+<style>
+  :root{ --accent:#2a9df4; --pos:#1e6ed1; --neg:#d13b3b; --border:#9aa; }
+  /* Box sizing reset to avoid unexpected overflow */
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body{background:#f6f9fc; margin:0; padding:0; font-family:Arial, sans-serif; color:#222;}
+  /* Make chem-wrap responsive and not wider than viewport */
+  .chem-wrap{
+    max-width:1200px;
+    width:calc(100% - 32px);
+    margin:24px auto;
+    background:#fff;
+    padding:16px;
+    border-radius:12px;
+    box-shadow:0 2px 6px rgba(0,0,0,0.08);
+    overflow:hidden; /* hide accidental overflow */
+  }
+
+  .title{text-align:center; font-weight:700; margin-bottom:6px; font-size:20px;}
+  .eq{ text-align:center; margin-bottom:12px; font-size:18px;}
+  .formula-box{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; align-items:center; margin-bottom:8px;}
+  .formula-part{display:inline-flex; align-items:center; gap:6px; font-weight:600;}
+
+  .controls-row{display:flex; gap:12px; align-items:center; justify-content:center; margin-bottom:12px; flex-wrap:wrap;}
+
+  /* layout: allow right column to shrink but not disappear, prevents overflow */
+  .layout{
+    display:grid;
+    grid-template-columns: 1fr minmax(280px, 480px);
+    gap:16px;
+    align-items:start;
+  }
+  @media (max-width:1100px){ .layout{grid-template-columns:1fr;} }
+
+  table.chem{border-collapse:collapse; width:100%;}
+  table.chem caption{caption-side:top; font-weight:700; margin-bottom:8px; text-align:left;}
+  table.chem th, table.chem td{border:1px solid var(--border); padding:6px; text-align:center; min-width:46px; background:#fff; vertical-align:middle;}
+  table.chem th{background:#e6f0fb; font-weight:700;}
+  .elem-cell{background:#fafafa; font-weight:600;}
+  input.num{width:100%; border:0; text-align:center; font-size:14px; padding:4px; background:transparent;}
+  input.num:focus{outline:1px solid var(--accent); background:#eef7ff;}
+  .coef{width:48px; padding:4px; text-align:center; border-radius:6px; border:1px solid #d7eafb; background:#f8fbff;}
+  .mol-header{display:flex; flex-direction:column; gap:6px; align-items:center; justify-content:center;}
+  .mol-name{font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:80px;}
+  .mol-coef-label{font-size:11px; color:#555;}
+  .rp-cell{min-height:36px; min-width:64px; display:flex; align-items:center; justify-content:center; background:#fff; transition:color 0.15s, background 0.15s;}
+  .rp-zero{color:#333;}
+  .rp-pos{color:var(--pos); font-weight:700;}
+  .rp-neg{color:var(--neg); font-weight:700;}
+  .note{font-size:13px; color:#555; text-align:center; margin-top:8px;}
+  .mol-fallback{opacity:0.7; font-style:italic;}
+  .rp-header{ white-space:nowrap; vertical-align:middle; }
+
+  /* vector panel: responsive; doesn't force width beyond container */
+  .vector-panel{
+    background:#fff;
+    border:1px solid #e2eefc;
+    border-radius:10px;
+    padding:8px;
+    max-width:100%;
+    overflow:hidden; /* clip anything that would escape */
+  }
+  .vector-title{font-weight:700; font-size:15px; margin-bottom:8px; text-align:center;}
+
+  /* SVG: scale to container width, keep aspect, and avoid overflow */
+  .vector-svg{
+    width:100%;
+    height:auto;
+    display:block;
+    background:linear-gradient(180deg,#fbfeff,#f7fbff);
+    border-radius:8px;
+    border:1px solid #e6f7ff;
+    max-width:100%;
+    overflow:hidden;
+  }
+
+  /* Axis labels moved to HTML block under SVG to avoid overlapping ticks/markers */
+  .axis-labels{display:flex; justify-content:space-between; align-items:center; margin-top:6px; gap:8px; padding:0 6px;}
+  .axis-labels .x-label{flex:1; text-align:center; font-weight:600; color:#234;}
+  .axis-labels .y-label{width:48px; text-align:left; font-weight:600; color:#234;}
+  .vector-legend{font-size:13px; margin-top:8px; color:#444; text-align:center;}
+  .axis-selectors{display:flex; gap:8px; justify-content:center; align-items:center; margin-bottom:8px; flex-wrap:wrap;}
+  .axis-selectors label{font-size:13px; color:#333;}
+
+  @media (max-width:880px){
+    .coef{width:40px;}
+    table.chem th, table.chem td{font-size:13px; padding:6px;}
+    .formula-box{font-size:15px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="chem-wrap">
+  <div class="title">Інтерактивна таблиця — баланс реакції + вектори</div>
+
+  <div class="eq" aria-live="polite">
+    <div class="formula-box" id="equation"></div>
+    <div style="font-size:13px; color:#444;">(Реагенти зліва — Продукти справа)</div>
+  </div>
+
+  <div class="controls-row">
+    <div style="font-size:13px; color:#444;">Оберіть осі для векторів (X, Y):</div>
+    <div class="axis-selectors" id="axisSelectors"></div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <table class="chem" id="mainTable" aria-label="Таблиця елементів і молекул">
+        <caption>Таблиця атомних індексів у молекулах і вектори по осях</caption>
+        <thead>
+          <tr>
+            <th scope="col" rowspan="2">Елемент</th>
+            <th scope="col" rowspan="2">X</th>
+            <th scope="col" rowspan="2">Y</th>
+            <th scope="col" colspan="3">Реагенти</th>
+            <th scope="col" rowspan="2" class="rp-header">R − P</th>
+            <th scope="col" colspan="5">Продукти</th>
+          </tr>
+          <tr id="moleculeHeaders"></tr>
+        </thead>
+        <tbody id="elementsBody"></tbody>
+      </table>
+
+      <div class="note">Змінюй числа індексів або коефіцієнти — рівняння, різниця (R − P) та вектори оновлюються автоматично. Якщо коефіцієнт 0 — молекулу не показуємо; 1 — цифру 1 не показуємо.</div>
+    </div>
+
+    <div class="vector-panel" aria-label="Панель векторів">
+      <div class="vector-title">Координатна сітка 0…10 — вектори молекул</div>
+
+      <!-- SVG: preserveAspectRatio so scaling stays centered and inside bounds -->
+      <svg id="vectorSvg" class="vector-svg" viewBox="0 0 520 520" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Координатна сітка"></svg>
+
+      <!-- axis labels moved to HTML under SVG to avoid overlap -->
+      <div class="axis-labels" aria-hidden="false">
+        <div class="y-label" id="axisLabelY">Y:</div>
+        <div class="x-label" id="axisLabelX">X:</div>
+      </div>
+
+      <div class="vector-legend" id="vectorLegend">Координати: (X, Y) — значення кількостей елементів по вибраних осях. Кількість маркерів для молекули = її коефіцієнт.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const elements = ["H","C","O","N","P","S","F","Na","Ca"];
+  const reactants = [
+    {id:"h2o", label:"H2O"},
+    {id:"co2", label:"CO2"},
+    {id:"o2",  label:"O2"}
+  ];
+  const products = [
+    {id:"h2",   label:"H2"},
+    {id:"o3",   label:"O3"},
+    {id:"h2co3",label:"H2CO3"},
+    {id:"n2",   label:"N2"},
+    {id:"nh3",  label:"NH3"}
+  ];
+
+  // --- Заголовки молекул
+  const headerRow = document.getElementById("moleculeHeaders");
+  function makeMolHeaderCell(mol){
+    const th = document.createElement("th");
+    th.setAttribute("scope","col");
+    th.innerHTML = `
+      <div class="mol-header">
+        <div class="mol-name" data-mol="${mol.id}" id="name_${mol.id}" title="${mol.label}">${mol.label}</div>
+        <div class="mol-coef-label">
+          <input class="coef" aria-label="Коефіцієнт ${mol.label}" data-mol="${mol.id}" type="number" min="0" step="1" value="1">
+        </div>
+      </div>`;
+    return th;
+  }
+  reactants.forEach(m => headerRow.appendChild(makeMolHeaderCell(m)));
+  products.forEach(m => headerRow.appendChild(makeMolHeaderCell(m)));
+
+  // --- Тіло таблиці (з X/Y радіо)
+  const body = document.getElementById("elementsBody");
+  elements.forEach((elem, idx) => {
+    const tr = document.createElement("tr");
+    const tdElem = document.createElement("td"); tdElem.className = "elem-cell"; tdElem.textContent = elem; tr.appendChild(tdElem);
+    const tdX = document.createElement("td"); tdX.innerHTML = `<input type="radio" name="axis-x" aria-label="Обрати ${elem} як X" value="${elem}" ${idx===0 ? "checked" : ""}>`; tr.appendChild(tdX);
+    const tdY = document.createElement("td"); tdY.innerHTML = `<input type="radio" name="axis-y" aria-label="Обрати ${elem} як Y" value="${elem}" ${idx===1 ? "checked" : ""}>`; tr.appendChild(tdY);
+
+    reactants.forEach(m => {
+      const td = document.createElement("td");
+      td.innerHTML = `<input class="num cell left" data-mol="${m.id}" data-elem="${elem}" type="number" value="${defaultIndex(m.id, elem)}" min="0" step="1" aria-label="Індекс елемента ${elem} в молекулі ${m.label}">`;
+      tr.appendChild(td);
+    });
+
+    const rpTd = document.createElement("td"); rpTd.className = "rp-cell"; rpTd.id = `rp_${elem}`; rpTd.textContent = "0"; tr.appendChild(rpTd);
+
+    products.forEach(m => {
+      const td = document.createElement("td");
+      td.innerHTML = `<input class="num cell right" data-mol="${m.id}" data-elem="${elem}" type="number" value="${defaultIndex(m.id, elem)}" min="0" step="1" aria-label="Індекс елемента ${elem} в молекулі ${m.label}">`;
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  });
+
+  function defaultIndex(mol, elem){
+    const map = {
+      h2o: {H:2,O:1},
+      co2: {C:1,O:2},
+      o2:  {O:2},
+      h2:  {H:2},
+      o3:  {O:3},
+      h2co3:{H:2,C:1,O:3},
+      n2:  {N:2},
+      nh3: {N:1,H:3}
+    };
+    return (map[mol] && map[mol][elem]) ? map[mol][elem] : 0;
+  }
+
+  function qAll(selector){ return Array.from(document.querySelectorAll(selector)); }
+  function q(selector){ return document.querySelector(selector); }
+
+  function buildFormulaHTML(molId){
+    const parts = [];
+    elements.forEach(el => {
+      const input = document.querySelector(`.cell[data-mol="${molId}"][data-elem="${el}"]`);
+      const val = input ? Number(input.value) || 0 : 0;
+      if(val > 0) parts.push(el + (val > 1 ? `${val}` : ""));
+    });
+    return parts.length ? parts.join("") : `<span class="mol-fallback">${molId}</span>`;
+  }
+
+  function buildEquation(){
+    const leftParts = [];
+    reactants.forEach(m => {
+      const coefInput = document.querySelector(`.coef[data-mol="${m.id}"]`);
+      const coef = coefInput ? Math.max(0, Math.floor(Number(coefInput.value) || 0)) : 0;
+      if(coef === 0) return;
+      const formula = buildFormulaHTML(m.id);
+      leftParts.push((coef>1?coef:'') + formula);
+    });
+    const rightParts = [];
+    products.forEach(m => {
+      const coefInput = document.querySelector(`.coef[data-mol="${m.id}"]`);
+      const coef = coefInput ? Math.max(0, Math.floor(Number(coefInput.value) || 0)) : 0;
+      if(coef === 0) return;
+      const formula = buildFormulaHTML(m.id);
+      rightParts.push((coef>1?coef:'') + formula);
+    });
+
+    const joiner = ' <span style="color:#666; font-weight:600">+</span> ';
+    const leftHTML = leftParts.length ? leftParts.join(joiner) : '<span style="color:#999">—</span>';
+    const rightHTML = rightParts.length ? rightParts.join(joiner) : '<span style="color:#999">—</span>';
+    document.getElementById("equation").innerHTML = `<div class="formula-part">${leftHTML}</div><div style="font-weight:700; padding:0 8px"> = </div><div class="formula-part">${rightHTML}</div>`;
+  }
+
+  function updateDifference(){
+    elements.forEach(elem => {
+      let leftSum = 0;
+      qAll(`.left[data-elem="${elem}"]`).forEach(input => leftSum += Number(input.value) || 0);
+      let rightSum = 0;
+      qAll(`.right[data-elem="${elem}"]`).forEach(input => rightSum += Number(input.value) || 0);
+      const diff = leftSum - rightSum;
+      const cell = document.getElementById(`rp_${elem}`);
+      if(!cell) return;
+      cell.textContent = diff;
+      cell.classList.remove("rp-pos","rp-neg","rp-zero");
+      if(diff > 0) cell.classList.add("rp-pos");
+      else if(diff < 0) cell.classList.add("rp-neg");
+      else cell.classList.add("rp-zero");
+    });
+  }
+
+  // --- SVG grid & vectors (with clamping to avoid overflow)
+  const svg = document.getElementById("vectorSvg");
+  svg.setAttribute('overflow','hidden');
+  const svgSize = 520;
+  const padding = 40; // inner margin so nothing touches panel border
+  const coordMin = 0;
+  const coordMax = 10;
+  const gridCount = coordMax - coordMin + 1;
+
+  function drawGrid(){
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    const bg = document.createElementNS("http://www.w3.org/2000/svg","rect");
+    bg.setAttribute("x","0"); bg.setAttribute("y","0"); bg.setAttribute("width","520"); bg.setAttribute("height","520");
+    bg.setAttribute("fill","transparent");
+    svg.appendChild(bg);
+
+    const innerSize = svgSize - padding*2;
+    const step = innerSize / (coordMax - coordMin);
+
+    // dots and ticks
+    for(let i=0;i<gridCount;i++){
+      const x = padding + i*step;
+      for(let j=0;j<gridCount;j++){
+        const y = padding + (gridCount-1-j)*step;
+        const dot = document.createElementNS("http://www.w3.org/2000/svg","circle");
+        dot.setAttribute("cx", x.toString());
+        dot.setAttribute("cy", y.toString());
+        dot.setAttribute("r", "2");
+        dot.setAttribute("fill", "#d9eefe");
+        svg.appendChild(dot);
+      }
+
+      // X ticks: place just above the bottom margin reserved for axis-label HTML
+      const tx = document.createElementNS("http://www.w3.org/2000/svg","text");
+      tx.setAttribute("x", (padding + i*step).toString());
+      tx.setAttribute("y", (svgSize - Math.round(padding/2) - 6).toString());
+      tx.setAttribute("font-size", "10");
+      tx.setAttribute("fill", "#436");
+      tx.setAttribute("text-anchor","middle");
+      tx.textContent = String(coordMin + i);
+      svg.appendChild(tx);
+
+      // Y ticks (left)
+      const ty = document.createElementNS("http://www.w3.org/2000/svg","text");
+      ty.setAttribute("x", String(12));
+      ty.setAttribute("y", (padding + (gridCount-1-i)*step + 3).toString());
+      ty.setAttribute("font-size", "10");
+      ty.setAttribute("fill", "#436");
+      ty.setAttribute("text-anchor","start");
+      ty.textContent = String(coordMin + i);
+      svg.appendChild(ty);
+    }
+
+    // axes (inside padding)
+    const axisX = document.createElementNS("http://www.w3.org/2000/svg","line");
+    axisX.setAttribute("x1", padding.toString());
+    axisX.setAttribute("y1", (svgSize - padding).toString());
+    axisX.setAttribute("x2", (svgSize - padding).toString());
+    axisX.setAttribute("y2", (svgSize - padding).toString());
+    axisX.setAttribute("stroke","#79a9d9");
+    axisX.setAttribute("stroke-width","1.5");
+    svg.appendChild(axisX);
+
+    const axisY = document.createElementNS("http://www.w3.org/2000/svg","line");
+    axisY.setAttribute("x1", padding.toString());
+    axisY.setAttribute("y1", padding.toString());
+    axisY.setAttribute("x2", padding.toString());
+    axisY.setAttribute("y2", (svgSize - padding).toString());
+    axisY.setAttribute("stroke","#79a9d9");
+    axisY.setAttribute("stroke-width","1.5");
+    svg.appendChild(axisY);
+  }
+
+  function getSelectedAxes(){
+    const x = q('input[name="axis-x"]:checked')?.value || elements[0];
+    const y = q('input[name="axis-y"]:checked')?.value || elements[1] || elements[0];
+    return { x, y };
+  }
+
+  function drawVectors(){
+    drawGrid();
+
+    const innerSize = svgSize - padding*2;
+    const step = innerSize / (coordMax - coordMin);
+    const axes = getSelectedAxes();
+
+    // update HTML axis labels (outside SVG) so they never overlap ticks or markers
+    const axisLabelX = document.getElementById('axisLabelX');
+    const axisLabelY = document.getElementById('axisLabelY');
+    if(axisLabelX) axisLabelX.textContent = `X: ${axes.x}`;
+    if(axisLabelY) axisLabelY.textContent = `Y: ${axes.y}`;
+
+    const grp = document.createElementNS("http://www.w3.org/2000/svg","g");
+    grp.setAttribute("id","vectorsGroup");
+    svg.appendChild(grp);
+
+    const palette = ["#e85d5d","#5da0e8","#5de89a","#e8c95d","#b35de8","#5de0e8","#e85dc4","#8fbf5d","#5d7fe8","#d1863a"];
+    const allMols = [...reactants, ...products];
+
+    const maxJitter = Math.max(1, Math.min(6, step * 0.18));
+    const minC = padding + 6;           // increased margin to avoid touching edge
+    const maxC = svgSize - padding - 6; // increased margin to avoid touching edge
+
+    allMols.forEach((mol, mi) => {
+      const coefInput = q(`.coef[data-mol="${mol.id}"]`);
+      const coef = coefInput ? Math.max(0, Math.floor(Number(coefInput.value) || 0)) : 0;
+      if(coef <= 0) return;
+
+      const xCountInput = q(`.cell[data-mol="${mol.id}"][data-elem="${axes.x}"]`);
+      const yCountInput = q(`.cell[data-mol="${mol.id}"][data-elem="${axes.y}"]`);
+      const xCount = xCountInput ? Math.max(0, Math.floor(Number(xCountInput.value) || 0)) : 0;
+      const yCount = yCountInput ? Math.max(0, Math.floor(Number(yCountInput.value) || 0)) : 0;
+
+      if(xCount===0 && yCount===0) return;
+
+      const color = palette[mi % palette.length];
+
+      for(let k=0;k<coef;k++){
+        const jitter = (k - (coef-1)/2) * maxJitter;
+        const xVal = Math.min(coordMax, Math.max(coordMin, xCount));
+        const yVal = Math.min(coordMax, Math.max(coordMin, yCount));
+        let cx = padding + xVal * step + jitter;
+        let cy = padding + (coordMax - yVal) * step + jitter;
+
+        // clamp marker coordinates inside inner rect (prevents markers touching edges)
+        cx = Math.min(maxC, Math.max(minC, cx));
+        cy = Math.min(maxC, Math.max(minC, cy));
+
+        const marker = document.createElementNS("http://www.w3.org/2000/svg","circle");
+        marker.setAttribute("cx", cx.toString());
+        marker.setAttribute("cy", cy.toString());
+        marker.setAttribute("r", "7");
+        marker.setAttribute("fill", color);
+        marker.setAttribute("fill-opacity", "0.95");
+        marker.setAttribute("stroke","#fff");
+        marker.setAttribute("stroke-width","1.2");
+        marker.setAttribute("data-mol", mol.id);
+        marker.setAttribute("title", `${mol.label} → (${xCount}, ${yCount})`);
+        grp.appendChild(marker);
+
+        // label offset: try right, else left; clamp vertically to avoid bottom area
+        const txt = document.createElementNS("http://www.w3.org/2000/svg","text");
+        let tx = cx + 12;
+        let ty = cy + 4;
+        if (tx > maxC - 20) tx = cx - 12 - (mol.label.length * 4);
+        if (tx < minC + 8) tx = cx + 12;
+        if (ty > maxC - 8) ty = cy - 10;
+        if (ty < minC + 10) ty = cy + 12;
+        txt.setAttribute("x", tx.toString());
+        txt.setAttribute("y", ty.toString());
+        txt.setAttribute("font-size","10");
+        txt.setAttribute("fill","#214");
+        // shorten very long labels with ellipsis in SVG if needed
+        const labelText = `${mol.label}${coef>1?`×${coef}`:""}`;
+        txt.textContent = labelText.length > 12 ? (labelText.slice(0,11) + '…') : labelText;
+        grp.appendChild(txt);
+
+        // draw all markers (multiplicity), but labels are short and clamped
+      }
+    });
+
+    const anyVectors = svg.querySelectorAll('#vectorsGroup circle').length > 0;
+    if(!anyVectors){
+      const hint = document.createElementNS("http://www.w3.org/2000/svg","text");
+      hint.setAttribute("x",(svgSize/2).toString());
+      hint.setAttribute("y",(svgSize/2).toString());
+      hint.setAttribute("font-size","13");
+      hint.setAttribute("fill","#789");
+      hint.setAttribute("text-anchor","middle");
+      hint.textContent = "Немає видимих векторів (поставте коефіцієнт > 0 або виберіть інші осі)";
+      svg.appendChild(hint);
+    }
+  }
+
+  // build axis selectors and sync with table radios
+  const axisSelectors = document.getElementById("axisSelectors");
+  function buildAxisSelectors(){
+    axisSelectors.innerHTML = "";
+    const xGroup = document.createElement("div");
+    xGroup.style.display = "flex"; xGroup.style.gap = "8px"; xGroup.style.flexWrap = "wrap"; xGroup.style.alignItems = "center";
+    const xLabel = document.createElement("span");
+    xLabel.textContent = "X:"; xLabel.style.fontWeight = "600"; xLabel.style.marginRight = "4px";
+    xGroup.appendChild(xLabel);
+
+    elements.forEach((el, idx) => {
+      const lab = document.createElement("label");
+      lab.style.display = "inline-flex"; lab.style.alignItems = "center"; lab.style.gap = "4px";
+      const r = document.createElement("input");
+      r.type = "radio"; r.name = "axis-x-controls"; r.value = el; r.checked = (idx === 0);
+      r.addEventListener("change", () => {
+        const tableRadio = q(`input[name="axis-x"][value="${el}"]`);
+        if(tableRadio) tableRadio.checked = true;
+        drawVectors();
+      });
+      lab.appendChild(r);
+      const span = document.createElement("span"); span.textContent = el; span.style.fontSize = "13px";
+      lab.appendChild(span);
+      xGroup.appendChild(lab);
+    });
+
+    const yGroup = document.createElement("div");
+    yGroup.style.display = "flex"; yGroup.style.gap = "8px"; yGroup.style.flexWrap = "wrap"; yGroup.style.alignItems = "center";
+    const yLabel = document.createElement("span");
+    yLabel.textContent = "Y:"; yLabel.style.fontWeight = "600"; yLabel.style.marginRight = "4px";
+    yGroup.appendChild(yLabel);
+
+    elements.forEach((el, idx) => {
+      const lab = document.createElement("label");
+      lab.style.display = "inline-flex"; lab.style.alignItems = "center"; lab.style.gap = "4px";
+      const r = document.createElement("input");
+      r.type = "radio"; r.name = "axis-y-controls"; r.value = el; r.checked = (idx === 1);
+      r.addEventListener("change", () => {
+        const tableRadio = q(`input[name="axis-y"][value="${el}"]`);
+        if(tableRadio) tableRadio.checked = true;
+        drawVectors();
+      });
+      lab.appendChild(r);
+      const span = document.createElement("span"); span.textContent = el; span.style.fontSize = "13px";
+      lab.appendChild(span);
+      yGroup.appendChild(lab);
+    });
+
+    axisSelectors.appendChild(xGroup);
+    axisSelectors.appendChild(yGroup);
+
+    qAll('input[name="axis-x"]').forEach(r => r.addEventListener('change', () => {
+      const val = r.value;
+      const control = document.querySelector(`input[name="axis-x-controls"][value="${val}"]`);
+      if(control) control.checked = true;
+      drawVectors();
+    }));
+    qAll('input[name="axis-y"]').forEach(r => r.addEventListener('change', () => {
+      const val = r.value;
+      const control = document.querySelector(`input[name="axis-y-controls"][value="${val}"]`);
+      if(control) control.checked = true;
+      drawVectors();
+    }));
+  }
+
+  function onChangeHandler(){
+    [...reactants, ...products].forEach(m => {
+      const nameEl = document.getElementById(`name_${m.id}`);
+      if(nameEl) nameEl.innerHTML = buildFormulaHTML(m.id);
+    });
+    buildEquation();
+    updateDifference();
+    drawVectors();
+  }
+
+  // event bindings
+  qAll("input.num").forEach(inp => inp.addEventListener("input", onChangeHandler));
+  qAll("input.coef").forEach(inp => {
+    inp.addEventListener("input", () => {
+      inp.value = Math.max(0, Math.floor(Number(inp.value) || 0));
+      onChangeHandler();
+    });
+  });
+
+  buildAxisSelectors();
+
+  // initial coefficients
+  [...reactants, ...products].forEach(m => {
+    const coef = document.querySelector(`.coef[data-mol="${m.id}"]`);
+    const any = elements.some(el => {
+      const cell = document.querySelector(`.cell[data-mol="${m.id}"][data-elem="${el}"]`);
+      return cell && Number(cell.value) > 0;
+    });
+    if(coef) coef.value = any ? (coef.value || 1) : 0;
+  });
+
+  onChangeHandler();
+
+  window.addEventListener('resize', () => drawVectors());
+});
+</script>
+
+</body>
+</html>
