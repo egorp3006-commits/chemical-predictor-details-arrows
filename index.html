@@ -718,30 +718,51 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const totalsR = sumProjectedTotals(reactants);
     const totalsP = sumProjectedTotals(products);
-    const ptsR = independentVectors ? [] : buildCumulativePathByInstancesOrdered(reactantsOrdered);
-    const ptsP = independentVectors ? [] : buildCumulativePathByInstancesOrdered(productsOrdered);
-    const vectorsR = independentVectors ? buildIndependentVectors(reactantsOrdered) : [];
-    const vectorsP = independentVectors ? buildIndependentVectors(productsOrdered) : [];
-
+    let ptsR = [];
+    let ptsP = [];
+    let vectorsR = [];
+    let vectorsP = [];
+    let visibleReactants = false;
+    let visibleProducts = false;
+    let endR = { x: 0, y: 0 };
+    let endP = { x: 0, y: 0 };
+    let legendModeNote = '';
+    let mappingNoteText = '';
+    let modeNoteText = '';
     const allPoints = [{ x: 0, y: 0 }];
+    let drawModeVectors = () => {};
+
     if(independentVectors){
+      vectorsR = buildIndependentVectors(reactantsOrdered);
+      vectorsP = buildIndependentVectors(productsOrdered);
       vectorsR.forEach(v => allPoints.push({ x: v.x, y: v.y }));
       vectorsP.forEach(v => allPoints.push({ x: v.x, y: v.y }));
+      visibleReactants = vectorsR.length > 0;
+      visibleProducts = vectorsP.length > 0;
+      endR = totalsR;
+      endP = totalsP;
+      legendModeNote = '<div style="margin-top:8px; font-size:13px; color:#555;">Незалежні вектори показані від (0,0); коефіцієнти не відображені.</div>';
+      mappingNoteText = 'Примітка: у режимі незалежних векторів коефіцієнти не застосовуються до довжин векторів.';
+      modeNoteText = 'Режим незалежних векторів: коефіцієнти ігноруються, кожна молекула має один вектор з (0,0).';
+      drawModeVectors = () => {
+        vectorsR.forEach(v => drawSegmentsWithArrows([{ x: 0, y: 0, label: null }, { x: v.x, y: v.y, label: v.label }], colorR, "arrowR", -1));
+        vectorsP.forEach(v => drawSegmentsWithArrows([{ x: 0, y: 0, label: null }, { x: v.x, y: v.y, label: v.label }], colorP, "arrowP", +1));
+      };
     } else {
+      ptsR = buildCumulativePathByInstancesOrdered(reactantsOrdered);
+      ptsP = buildCumulativePathByInstancesOrdered(productsOrdered);
       ptsR.forEach(p => allPoints.push(p));
       ptsP.forEach(p => allPoints.push(p));
+      visibleReactants = ptsR.length > 1;
+      visibleProducts = ptsP.length > 1;
+      endR = ptsR.length ? ptsR[ptsR.length - 1] : { x: 0, y: 0 };
+      endP = ptsP.length ? ptsP[ptsP.length - 1] : { x: 0, y: 0 };
+      mappingNoteText = 'Примітка: у візуалізації кожна молекула з коефіцієнтом k відтворюється як k окремих сегментів.';
+      drawModeVectors = () => {
+        drawSegmentsWithArrows(ptsR, colorR, "arrowR", -1);
+        drawSegmentsWithArrows(ptsP, colorP, "arrowP", +1);
+      };
     }
-
-    const visibleReactants = independentVectors ? vectorsR.length > 0 : reactantsOrdered.some(m => {
-      const coef = Math.max(0, Math.min(MAX_COEF, Math.floor(Number(q(`.coef[data-mol="${m.id}"]`)?.value || 0))));
-      const vx = readCountRaw(m.id, axes.x); const vy = readCountRaw(m.id, axes.y);
-      return coef > 0 && (vx !== 0 || vy !== 0);
-    });
-    const visibleProducts = independentVectors ? vectorsP.length > 0 : productsOrdered.some(m => {
-      const coef = Math.max(0, Math.min(MAX_COEF, Math.floor(Number(q(`.coef[data-mol="${m.id}"]`)?.value || 0))));
-      const vx = readCountRaw(m.id, axes.x); const vy = readCountRaw(m.id, axes.y);
-      return coef > 0 && (vx !== 0 || vy !== 0);
-    });
 
     const methodDefEl = document.getElementById('methodDef');
     if(!visibleReactants || !visibleProducts){
@@ -771,7 +792,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if(methodDefEl){
       let modeNote = methodDefEl.querySelector('.mode-note');
-      if(independentVectors){
+      if(modeNoteText){
         if(!modeNote){
           modeNote = document.createElement('div');
           modeNote.className = 'mode-note';
@@ -779,7 +800,7 @@ document.addEventListener("DOMContentLoaded", () => {
           modeNote.style.color = '#444';
           methodDefEl.appendChild(modeNote);
         }
-        modeNote.textContent = 'Режим незалежних векторів: коефіцієнти ігноруються, кожна молекула має один вектор з (0,0).';
+        modeNote.textContent = modeNoteText;
       } else if(modeNote){
         modeNote.remove();
       }
@@ -963,16 +984,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const colorR = "#5da0e8"; const colorP = "#e85d5d";
-    if(independentVectors){
-      vectorsR.forEach(v => drawSegmentsWithArrows([{ x: 0, y: 0, label: null }, { x: v.x, y: v.y, label: v.label }], colorR, "arrowR", -1));
-      vectorsP.forEach(v => drawSegmentsWithArrows([{ x: 0, y: 0, label: null }, { x: v.x, y: v.y, label: v.label }], colorP, "arrowP", +1));
-    } else {
-      drawSegmentsWithArrows(ptsR, colorR, "arrowR", -1);
-      drawSegmentsWithArrows(ptsP, colorP, "arrowP", +1);
-    }
-
-    const endR = independentVectors ? totalsR : (ptsR.length ? ptsR[ptsR.length - 1] : { x: 0, y: 0 });
-    const endP = independentVectors ? totalsP : (ptsP.length ? ptsP[ptsP.length - 1] : { x: 0, y: 0 });
+    drawModeVectors();
 
     function buildEquationLeftSide(){
       const parts = [];
@@ -1034,13 +1046,13 @@ document.addEventListener("DOMContentLoaded", () => {
           <div style="display:flex; gap:20px; margin-top:12px; font-size:13px;">
             <div><span style="color:#5da0e8; font-weight:700;">🔵 Реактанти:</span> ${reactFormula}</div>
             <div><span style="color:#e85d5d; font-weight:700;">🔴 Продукти:</span> ${prodFormula}</div>
-          </div>${independentVectors ? '<div style="margin-top:8px; font-size:13px; color:#555;">Незалежні вектори показані від (0,0); коефіцієнти не відображені.</div>' : ''}`;
+          </div>${legendModeNote}`;
       } else {
         legend.innerHTML = `<div style="margin-bottom: 8px;">❌ <b>Not balanced</b> — End_R = (${endR.x}, ${endR.y}), End_P = (${endP.x}, ${endP.y})</div>
           <div style="display:flex; gap:20px; margin-top: 12px; font-size:13px;">
             <div><span style="color:#5da0e8; font-weight:700;">🔵 Реактанти:</span> ${reactFormula}</div>
             <div><span style="color:#e85d5d; font-weight:700;">🔴 Продукти:</span> ${prodFormula}</div>
-          </div>${independentVectors ? '<div style="margin-top:8px; font-size:13px; color:#555;">Незалежні вектори показані від (0,0); коефіцієнти не відображені.</div>' : ''}`;
+          </div>${legendModeNote}`;
       }
     }
 
@@ -1049,7 +1061,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if(mappingNoteEl){
       mappingNoteEl.innerHTML = `<div><b>Проєкція (осі ${axes.x}, ${axes.y}):</b></div>
         <div>R−P (з урахуванням коефіцієнтів) = (${rpProjX}, ${rpProjY}) = End_R − End_P (геометрично)</div>
-        <div style="color:#665; margin-top:4px;">${independentVectors ? 'Примітка: у режимі незалежних векторів коефіцієнти не застосовуються до довжин векторів.' : 'Примітка: у візуалізації кожна молекула з коефіцієнтом k відтворюється як k окремих сегментів.'}</div>`;
+        <div style="color:#665; margin-top:4px;">${mappingNoteText}</div>`;
     }
 
     saveStateDebounced();
